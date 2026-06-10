@@ -1,92 +1,249 @@
 import streamlit as st
 import requests
 
-
 BACKEND_URL = "http://127.0.0.1:5000"
 
+# ==================================================
+# PAGE CONFIG
+# ==================================================
 
 st.set_page_config(
-    page_title="RAG PDF Chatbot",
+    page_title="Document Q&A",
+    page_icon="📄",
     layout="wide"
 )
 
-st.title("📘 RAG-Based AI PDF Chatbot")
+# ==================================================
+# CUSTOM CSS
+# ==================================================
 
+st.markdown("""
+<style>
 
-# ===================================
-# Session State
-# ===================================
+/* Main App */
+.stApp {
+    background-color: #000000;
+    color: white;
+}
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+/* Sidebar */
+section[data-testid="stSidebar"] {
+    background-color: #111111;
+}
 
+/* All Text */
+h1, h2, h3, h4, h5, h6,
+p, div, span, label {
+    color: white !important;
+}
 
-# ===================================
-# Upload PDF Section
-# ===================================
+/* Title */
+.main-title {
+    font-size: 42px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 10px;
+}
 
-st.header("📂 Upload PDF")
+.sub-title {
+    color: #d1d5db;
+    margin-bottom: 30px;
+}
 
-uploaded_file = st.file_uploader(
-    "Choose a PDF file",
-    type=["pdf"]
+/* Answer Card */
+.answer-card {
+    background-color: #111111;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #333333;
+    color: white;
+    margin-bottom: 20px;
+}
+
+/* Source Card */
+.source-card {
+    background-color: #1a1a1a;
+    padding: 15px;
+    border-radius: 10px;
+    color: white;
+    border: 1px solid #333333;
+}
+
+/* Text Input */
+.stTextInput input {
+    background-color: #ffffff !important;
+    color: black !important;
+    border: 1px solid #444 !important;
+}
+
+/* Buttons */
+.stButton > button {
+    background-color: white;
+    color: black;
+    border-radius: 8px;
+    font-weight: bold;
+    border: none;
+    width: 100%;
+}
+
+.stButton > button:hover {
+    background-color: #dddddd;
+}
+
+/* File uploader */
+[data-testid="stFileUploader"] {
+    background-color: #111111;
+    border: 1px solid #333333;
+    border-radius: 12px;
+    padding: 15px;
+}
+            
+/* Inner white upload box */
+[data-testid="stFileUploaderDropzone"] {
+    background-color: #ffffff !important;
+    border: 2px dashed #cccccc !important;
+    border-radius: 10px !important;
+}
+
+/* Upload text */
+[data-testid="stFileUploaderDropzone"] * {
+            
+    color: black !important;
+}
+            
+/* Expander */
+.streamlit-expanderHeader {
+    color: white !important;
+}
+
+.streamlit-expanderContent {
+    color: white !important;
+}
+
+/* Success Box */
+.stSuccess {
+    color: white !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# ==================================================
+# SESSION STATE
+# ==================================================
+
+if "answer" not in st.session_state:
+    st.session_state.answer = ""
+
+if "sources" not in st.session_state:
+    st.session_state.sources = []
+
+# ==================================================
+# SIDEBAR
+# ==================================================
+
+with st.sidebar:
+
+    st.markdown("## 📂 Upload Document")
+
+    uploaded_file = st.file_uploader(
+        "Choose a PDF",
+        type=["pdf"]
+    )
+
+    if uploaded_file:
+
+        st.success(
+            f"Uploaded:\n\n{uploaded_file.name}"
+        )
+
+        if st.button(
+            "Process PDF",
+            use_container_width=True
+        ):
+
+            files = {
+                "file": (
+                    uploaded_file.name,
+                    uploaded_file,
+                    "application/pdf"
+                )
+            }
+
+            with st.spinner(
+                "Processing PDF..."
+            ):
+
+                response = requests.post(
+                    f"{BACKEND_URL}/upload",
+                    files=files
+                )
+
+            if response.status_code == 200:
+
+                data = response.json()
+
+                st.success(
+                    f"""
+PDF Processed Successfully
+
+Chunks Created:
+{data['total_chunks']}
+"""
+                )
+
+            else:
+
+                st.error(
+                    response.json()["error"]
+                )
+
+# ==================================================
+# MAIN CONTENT
+# ==================================================
+
+st.markdown(
+    """
+<div class="main-title">
+📄 Document Q&A with AI
+</div>
+""",
+    unsafe_allow_html=True
 )
 
-if uploaded_file is not None:
-
-    files = {
-        "file": (
-            uploaded_file.name,
-            uploaded_file,
-            "application/pdf"
-        )
-    }
-
-    with st.spinner("Processing PDF..."):
-
-        response = requests.post(
-            f"{BACKEND_URL}/upload",
-            files=files
-        )
-
-    if response.status_code == 200:
-
-        data = response.json()
-
-        st.success("PDF uploaded successfully!")
-
-        st.write(
-            f"Total Chunks Created: {data['total_chunks']}"
-        )
-
-    else:
-
-        st.error(response.json()["error"])
-
-
-# ===================================
-# Chat Section
-# ===================================
-
-st.header("💬 Chat with AI")
-
-user_question = st.text_input(
-    "Ask a question from your PDF"
+st.markdown(
+    """
+<div class="sub-title">
+Upload a PDF and ask questions about it.
+</div>
+""",
+    unsafe_allow_html=True
 )
 
-if st.button("Ask AI"):
+st.markdown("## Ask a Question")
 
-    if user_question.strip() == "":
+question = st.text_input(
+    "",
+    placeholder="What is BERT?"
+)
 
-        st.warning("Please enter a question.")
+if st.button("Ask"):
+
+    if question.strip() == "":
+
+        st.warning(
+            "Please enter a question."
+        )
 
     else:
 
         payload = {
-            "question": user_question
+            "question": question
         }
 
-        with st.spinner("Generating AI response..."):
+        with st.spinner(
+            "Generating response..."
+        ):
 
             response = requests.post(
                 f"{BACKEND_URL}/chat",
@@ -97,53 +254,56 @@ if st.button("Ask AI"):
 
             data = response.json()
 
-            ai_response = data["response"]
-
-            retrieved_sources = data.get(
-                "sources",
-                []
+            st.session_state.answer = (
+                data["response"]
             )
 
-            # Save chat history
-            st.session_state.chat_history.append({
-                "question": user_question,
-                "answer": ai_response,
-                "sources": retrieved_sources
-            })
+            st.session_state.sources = (
+                data.get("sources", [])
+            )
 
         else:
 
-            st.error(response.json()["error"])
+            st.error(
+                response.json()["error"]
+            )
 
+# ==================================================
+# ANSWER SECTION
+# ==================================================
 
-# ===================================
-# Display Chat History
-# ===================================
+if st.session_state.answer:
 
-st.header("🧠 Conversation History")
+    st.markdown("## Answer")
 
-for chat in reversed(st.session_state.chat_history):
+    st.markdown(
+        f"""
+<div class="answer-card">
+{st.session_state.answer}
+</div>
+""",
+        unsafe_allow_html=True
+    )
 
-    # User Message
-    with st.chat_message("user"):
-        st.write(chat["question"])
+# ==================================================
+# SOURCES SECTION
+# ==================================================
 
-    # AI Message
-    with st.chat_message("assistant"):
+if st.session_state.sources:
 
-        st.write(chat["answer"])
+    st.markdown("## Sources")
 
-        # Display Sources
-        if chat["sources"]:
+    for source in st.session_state.sources:
 
-            with st.expander("📚 View Sources"):
+        with st.expander(
+            f"Source {source['source_id']}"
+        ):
 
-                for source in chat["sources"]:
-
-                    st.markdown(
-                        f"""
-### Source {source['source_id']}
-
+            st.markdown(
+                f"""
+<div class="source-card">
 {source['content']}
-"""
-                    )
+</div>
+""",
+                unsafe_allow_html=True
+            )
